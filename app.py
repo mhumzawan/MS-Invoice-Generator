@@ -132,19 +132,22 @@ elif st.session_state.mode == 'voice':
                     import base64
                     import json
                     
-                    # 1. Clean and isolate the API key string
+                    # 1. Clean and enforce strict string formatting on the secret token
                     api_key = str(st.secrets["GEMINI_API_KEY"]).strip().replace('"', '').replace("'", "")
                     audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
                     
-                    # 2. Compliant API endpoint configuration
+                    # 2. Targeted endpoint definition specifying version operations explicitly
                     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
                     
+                    # 3. Double-header payload architecture to prevent OAuth2 structural fallbacks
                     headers = {
                         "Content-Type": "application/json",
-                        "x-goog-api-key": api_key
+                        "x-goog-api-key": api_key,
+                        "Authorization": f"Bearer {api_key}"  # Dual-auth mapping fallback to catch all gateway protocols
                     }
                     
-                    # 3. Formatted structure payload
+                    # Rest of your payload configuration below remains exactly the same...
+                    # 4. Formatted structure payload
                     payload = {
                         "contents": [{
                             "parts": [
@@ -171,9 +174,9 @@ elif st.session_state.mode == 'voice':
                         }]
                     }
                     
-                    # 4. Initialize response object to None to prevent NameError scope bugs
+                    # 5. Initialize response object to None to prevent NameError scope bugs
                     response_json = None
-                    
+
                     response = requests.post(url, headers=headers, json=payload)
                     response_json = response.json()
                     
