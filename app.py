@@ -133,7 +133,8 @@ elif st.session_state.mode == 'voice':
                     import base64
                     import json
                     
-                    api_key = st.secrets["GEMINI_API_KEY"]
+                    # Force-remove any hidden spaces, line breaks, or quotation marks from the secret string
+                    api_key = str(st.secrets["GEMINI_API_KEY"]).strip().replace('"', '').replace("'", "")
                     audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
                     
                     # Target endpoint matching official Gemini 2.5 REST guidelines
