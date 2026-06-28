@@ -126,14 +126,10 @@ def generate_invoice_pdf(meta_data, line_items, output_filename="invoice.pdf"):
     story.append(invoice_table)
     story.append(Spacer(1, 30))
 
-    # 4. Authentication/Signature Blocks
-    # Path to the signature image file in your repository
-    sig_image_path = "Signature.png"  # Make sure this image is pushed to your GitHub
+    sig_image_path = "signature.png"  
     
-    # Check if the image exists, otherwise fallback safely to text so it doesn't crash
     if os.path.exists(sig_image_path):
         from reportlab.platypus import Image
-        # Set the width and height of the signature image (e.g., 120 width, 40 height)
         sig_display = Image(sig_image_path, width=120, height=40)
     else:
         sig_display = Paragraph("<b>Signature:</b> ____________________", ParagraphStyle('Sig', parent=cell_style, alignment=2))
@@ -142,18 +138,27 @@ def generate_invoice_pdf(meta_data, line_items, output_filename="invoice.pdf"):
     def draw_footer(canvas, doc):
         canvas.saveState()
         
-        # Left side holds the total text, Right side holds your signature image asset
-        sig_data = [
-            [Paragraph(f"<b>Net Tax Inclusive Value:</b> Rs. {grand_inclusive:,.2f}", cell_style_bold), 
-             sig_display]
+        # Left block: Stack the Sales Tax Total and Grand Total vertically using Paragraphs
+        totals_block = [
+            Paragraph(f"<b>Total Sales Tax Payable:</b> Rs. {grand_tax:,.2f}", cell_style_bold),
+            Spacer(1, 4), # Tiny 4-point spacing block between the two rows
+            Paragraph(f"<b>Net Tax Inclusive Value:</b> Rs. {grand_inclusive:,.2f}", cell_style_bold)
         ]
         
-        sig_table = Table(sig_data, colWidths=[320, 220])  # Adjusted column widths to give the image room
+        # Right side holds your signature image asset, left side holds the stacked totals block
+        sig_data = [
+            [totals_block, sig_display]
+        ]
+        
+        # Total printable width is 540
+        sig_table = Table(sig_data, colWidths=[340, 200])  
         sig_table.setStyle(TableStyle([
             ('VALIGN', (0,0), (-1,-1), 'BOTTOM'),
             ('ALIGN', (1,0), (1,0), 'RIGHT'),  # Aligns the image cell content to the far right edge
+            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
         ]))
-        sig_table.wrap(540, 60)
+        
+        sig_table.wrap(540, 70) # Expanded height limit slightly to accommodate two rows of text
         sig_table.drawOn(canvas, 36, 36)
         canvas.restoreState()
 
