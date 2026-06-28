@@ -34,7 +34,7 @@ def generate_invoice_pdf(meta_data, line_items, output_filename="invoice.pdf"):
 
     # 1. Header Section (Matching company block)
     story.append(Paragraph("<b>BILL/SALES-TAX INVOICE</b>", title_style))
-    story.append(Paragraph("<b>MANAGEMENT SERVICES</b>", ParagraphStyle('Sub', parent=title_style, fontSize=16)))
+    story.append(Paragraph("<b>MANAGEMENT SERVICES</b>", ParagraphStyle('Sub', parent=title_style, fontSize=20)))
     story.append(Paragraph("38- Ghazali Flats GOR-IV Model Town Extension Lahore.", ParagraphStyle('Addr', parent=cell_style, alignment=1)))
     story.append(Paragraph("Sales-Tax Registration No. 03-00-XXXX-XXX-XX", ParagraphStyle('STRN', parent=cell_style, alignment=1)))
     story.append(Spacer(1, 20))
