@@ -132,20 +132,19 @@ elif st.session_state.mode == 'voice':
                     import base64
                     import json
                     
-                    # 1. Isolate the API key strictly without structural quote pollution
+                    # 1. Clean the API key from secrets completely
                     api_key = str(st.secrets["GEMINI_API_KEY"]).strip().replace('"', '').replace("'", "")
                     audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
                     
-                    # 2. Base REST Endpoint 
-                    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+                    # 2. THE CRUCIAL ENDPOINT FIX: Append the key directly via ?key= to the specialized v1beta developer model path
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
                     
-                    # 3. Clean headers: NO OAuth or Bearer references to prevent Cloud Gateway interference
+                    # 3. Clean Headers: ONLY Content-Type. Absolutely NO Authorization headers to prevent Cloud Gateway confusion
                     headers = {
-                        "Content-Type": "application/json",
-                        "x-goog-api-key": api_key
+                        "Content-Type": "application/json"
                     }
                     
-                    # 4. JSON Schema mapping configuration
+                    # 4. Payload format
                     payload = {
                         "contents": [{
                             "parts": [
@@ -176,12 +175,12 @@ elif st.session_state.mode == 'voice':
                     response = requests.post(url, headers=headers, json=payload)
                     response_json = response.json()
                     
-                    # Catch API level rejection codes
+                    # Catch API errors safely
                     if "error" in response_json:
                         st.error(f"Gemini API Error: {response_json['error'].get('message', 'Unknown error context')}")
                         st.stop()
                     
-                    # Extract raw response text
+                    # Extract raw text
                     raw_text = response_json['candidates'][0]['content']['parts'][0]['text']
                     
                     # Sanitize any accidental wrapper markers from markdown outputs
