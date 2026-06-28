@@ -119,57 +119,56 @@ elif st.session_state.mode == 'voice':
     st.subheader("🎙️ Voice Automated Ledger Engine")
     st.info("Dictate invoice details naturally (e.g., 'Create a bill for Ali Raza, phone 03001234567, job is 500 brochures at 15 rupees each with 18 percent sales tax').")
     
-    # 1. Ingest audio file
     audio_file = st.file_uploader("Upload or Record Audio Log File", type=["wav", "mp3", "m4a"])
     
     if audio_file:
-        # Accessing the bytes clears the Streamlit warning completely
         audio_bytes = audio_file.read()
         st.success("Audio data packet ingested successfully.")
         
         if st.button("✨ Process Voice & Generate Invoice", type="primary", use_container_width=True):
             with st.spinner("Analyzing audio context and generating document layout..."):
                 try:
-                    from google import genai
-                    from pydantic import BaseModel, Field
+                    import requests
+                    import base64
                     import json
                     
-                    # Initialize GenAI client using the Streamlit secret token
+                    # Grab your API key and map out the exact target schema structure
                     api_key = st.secrets["GEMINI_API_KEY"]
-                    client = genai.Client(api_key=api_key)
                     
-                    # Define strict structure schemas for the LLM output matching your fields
-                    class InvoiceLineItem(BaseModel):
-                        qty: float = Field(description="Quantity of the item")
-                        description: str = Field(description="Description of the printing job")
-                        price: float = Field(description="Price per unit / rate")
-                        st_rate: float = Field(default=18.0, description="Sales tax percentage rate")
-
-                    class VoiceInvoiceSchema(BaseModel):
-                        buyer_name: str = Field(default="", description="Name of the buyer/customer")
-                        bill_number: str = Field(default="", description="Bill or invoice number mentioned")
-                        po_number: str = Field(default="", description="Purchase order number if stated")
-                        phone: str = Field(default="", description="Phone number if mentioned")
-                        line_items: list[InvoiceLineItem] = Field(description="List of all printing jobs or items dictated")
-
-                    # Deliver the audio file payload directly to Gemini 2.5 Flash
-                    response = client.models.generate_content(
-                        model='gemini-2.5-flash',
-                        contents=[
-                            {
-                                "mime_type": audio_file.type,
-                                "data": audio_bytes
-                            },
-                            "Analyze this spoken invoice dictation. Extract the metadata fields and all operational line items into the structured schema. If details like Bill Number or PO number are missing, leave them blank."
-                        ],
-                        config=dict(
-                            response_mime_type="application/json",
-                            response_schema=VoiceInvoiceSchema,
-                        ),
-                    )
+                    # Convert audio bytes to safe base64 text for network transmission
+                    audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
                     
-                    # Parse extracted output map
-                    invoice_data = json.loads(response.text)
+                    # Standard API URL endpoint for Gemini 2.5 Flash
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+                    
+                    # Construct structural instruction payload
+                    payload = {
+                        "contents": [{
+                            "parts": [
+                                {
+                                    "inline_data": {
+                                        "mime_type": audio_file.type,
+                                        "data": audio_b64
+                                    }
+                                },
+                                {
+                                    "text": "Analyze this spoken invoice dictation. Extract the buyer_name, bill_number, po_number, phone, and line_items (each item should contain qty, description, price, st_rate). Respond strictly with a valid JSON object matching this schema layout."
+                                }
+                            ]
+                        }],
+                        "generationConfig": {
+                            "response_mime_type": "application/json"
+                        }
+                    }
+                    
+                    # Send direct HTTP Post Request
+                    headers = {"Content-Type": "application/json"}
+                    response = requests.post(url, headers=headers, json=payload)
+                    response_json = response.json()
+                    
+                    # Extract the raw text string returned inside Gemini's response structure
+                    raw_text = response_json['candidates'][0]['content']['parts'][0]['text']
+                    invoice_data = json.loads(raw_text)
                     
                     # Format dynamic meta mapping variables
                     meta = {
@@ -180,27 +179,24 @@ elif st.session_state.mode == 'voice':
                         'phone': invoice_data.get('phone', '')
                     }
                     
-                    # Compile the line item matrices
+                    # Compile line item arrays
                     lines = []
                     for item in invoice_data.get('line_items', []):
                         lines.append({
-                            'qty': item['qty'],
-                            'description': item['description'],
-                            'price': item['price'],
-                            'st_rate': item['st_rate']
+                            'qty': float(item.get('qty', 1)),
+                            'description': item.get('description', 'Printing Job'),
+                            'price': float(item.get('price', 0)),
+                            'st_rate': float(item.get('st_rate', 18))
                         })
                     
-                    # Fallback guard rule if no items were detected
                     if not lines:
                         lines = [{'qty': 1.0, 'description': 'Voice Dictated Printing Job', 'price': 0.0, 'st_rate': 18.0}]
                     
-                    # Trigger your layout generator module directly
+                    # Trigger template engine compilation
                     pdf_path = generate_invoice_pdf(meta, lines)
                     
                     st.balloons()
                     st.success("Invoice generated perfectly from voice dictation!")
-                    
-                    # Display summary verification for your father-in-law
                     st.markdown(f"**Extracted Buyer:** {meta['buyer_name']} | **Total Items processed:** {len(lines)}")
                     
                     with open(pdf_path, "rb") as f:
