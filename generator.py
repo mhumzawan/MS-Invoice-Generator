@@ -127,13 +127,36 @@ def generate_invoice_pdf(meta_data, line_items, output_filename="invoice.pdf"):
     story.append(Spacer(1, 30))
 
     # 4. Authentication/Signature Blocks
-    sig_data = [
-        [Paragraph(f"<b>Net Tax Inclusive Value:</b> Rs. {grand_inclusive:,.2f}", cell_style_bold), 
-         Paragraph("<b>Signature:</b> ____________________", ParagraphStyle('Sig', parent=cell_style, alignment=2))]
-    ]
-    sig_table = Table(sig_data, colWidths=[270, 270])
-    story.append(sig_table)
+    # Path to the signature image file in your repository
+    sig_image_path = "Signature.png"  # Make sure this image is pushed to your GitHub
+    
+    # Check if the image exists, otherwise fallback safely to text so it doesn't crash
+    if os.path.exists(sig_image_path):
+        from reportlab.platypus import Image
+        # Set the width and height of the signature image (e.g., 120 width, 40 height)
+        sig_display = Image(sig_image_path, width=120, height=40)
+    else:
+        sig_display = Paragraph("<b>Signature:</b> ____________________", ParagraphStyle('Sig', parent=cell_style, alignment=2))
 
-    # Compile structure to PDF
-    doc.build(story)
+    # Compile the final layout block
+    def draw_footer(canvas, doc):
+        canvas.saveState()
+        
+        # Left side holds the total text, Right side holds your signature image asset
+        sig_data = [
+            [Paragraph(f"<b>Net Tax Inclusive Value:</b> Rs. {grand_inclusive:,.2f}", cell_style_bold), 
+             sig_display]
+        ]
+        
+        sig_table = Table(sig_data, colWidths=[320, 220])  # Adjusted column widths to give the image room
+        sig_table.setStyle(TableStyle([
+            ('VALIGN', (0,0), (-1,-1), 'BOTTOM'),
+            ('ALIGN', (1,0), (1,0), 'RIGHT'),  # Aligns the image cell content to the far right edge
+        ]))
+        sig_table.wrap(540, 60)
+        sig_table.drawOn(canvas, 36, 36)
+        canvas.restoreState()
+
+    # Compile structure to PDF by executing the bottom draw action on page build
+    doc.build(story, onFirstPage=draw_footer, onLaterPages=draw_footer)
     return output_filename
