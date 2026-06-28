@@ -2,7 +2,6 @@ import streamlit as st
 import datetime
 from generator import generate_invoice_pdf
 
-GEMINI_API_KEY = "AQ.Ab8RN6LPaDkqOk3qRDyoK9d0F7EK-GDS0A2XuYkzRh_Ia4d0jg"
 
 # Initialize application settings and look-and-feel preferences
 st.set_page_config(page_title="Accessible Invoice Generator", layout="wide")
@@ -122,6 +121,8 @@ elif st.session_state.mode == 'voice':
     audio_file = st.file_uploader("Upload or Record Audio Log File", type=["wav", "mp3", "m4a"])
     
     if audio_file:
+        # Crucial fix: Reset file reader pointer to the beginning before reading bytes
+        audio_file.seek(0)
         audio_bytes = audio_file.read()
         st.success("Audio data packet ingested successfully.")
         
@@ -132,16 +133,13 @@ elif st.session_state.mode == 'voice':
                     import base64
                     import json
                     
-                    # Grab your API key and map out the exact target schema structure
                     api_key = st.secrets["GEMINI_API_KEY"]
-                    
-                    # Convert audio bytes to safe base64 text for network transmission
                     audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
                     
-                    # Standard API URL endpoint for Gemini 2.5 Flash
+                    # Target endpoint matching official Gemini 2.5 REST guidelines
                     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
                     
-                    # Construct structural instruction payload
+                    # Refined payload structure ensuring clean multipart block delivery
                     payload = {
                         "contents": [{
                             "parts": [
@@ -152,25 +150,48 @@ elif st.session_state.mode == 'voice':
                                     }
                                 },
                                 {
-                                    "text": "Analyze this spoken invoice dictation. Extract the buyer_name, bill_number, po_number, phone, and line_items (each item should contain qty, description, price, st_rate). Respond strictly with a valid JSON object matching this schema layout."
+                                    "text": (
+                                        "Analyze this spoken invoice dictation. Extract details into a JSON object matching this structure: "
+                                        "{"
+                                        "  \"buyer_name\": \"string\","
+                                        "  \"bill_number\": \"string\","
+                                        "  \"po_number\": \"string\","
+                                        "  \"phone\": \"string\","
+                                        "  \"line_items\": [{\"qty\": 1.0, \"description\": \"string\", \"price\": 0.0, \"st_rate\": 18.0}]"
+                                        "}"
+                                        "Respond strictly with valid JSON. Do not include markdown code block formatting."
+                                    )
                                 }
                             ]
-                        }],
-                        "generationConfig": {
-                            "response_mime_type": "application/json"
-                        }
+                        }]
                     }
                     
-                    # Send direct HTTP Post Request
                     headers = {"Content-Type": "application/json"}
                     response = requests.post(url, headers=headers, json=payload)
                     response_json = response.json()
                     
-                    # Extract the raw text string returned inside Gemini's response structure
-                    raw_text = response_json['candidates'][0]['content']['parts'][0]['text']
-                    invoice_data = json.loads(raw_text)
+                    # Safe check: Catch API errors (invalid key, bad file type, etc.) before digging into candidates
+                    if "error" in response_json:
+                        st.error(f"Gemini API Error: {response_json['error'].get('message', 'Unknown error context')}")
+                        st.stop()
                     
-                    # Format dynamic meta mapping variables
+                    # Extract the raw text safely
+                    try:
+                        raw_text = response_json['candidates'][0]['content']['parts'][0]['text']
+                    except KeyError:
+                        st.error("The model couldn't process the audio correctly. Try speaking more clearly or using a standard WAV/MP3 format.")
+                        st.write("API Response for debugging:", response_json)
+                        st.stop()
+                        
+                    # Clean up any residual json wrapping characters if present
+                    if raw_text.startswith("```json"):
+                        raw_text = raw_text.replace("```json", "", 1).rstrip("```")
+                    elif raw_text.startswith("```"):
+                        raw_text = raw_text.replace("```", "", 1).rstrip("```")
+                        
+                    invoice_data = json.loads(raw_text.strip())
+                    
+                    # Format layout meta variables
                     meta = {
                         'date': datetime.date.today().strftime("%d-%m-%Y"),
                         'buyer_name': invoice_data.get('buyer_name', 'Voice Order'),
@@ -179,7 +200,7 @@ elif st.session_state.mode == 'voice':
                         'phone': invoice_data.get('phone', '')
                     }
                     
-                    # Compile line item arrays
+                    # Compile extracted rows
                     lines = []
                     for item in invoice_data.get('line_items', []):
                         lines.append({
@@ -192,7 +213,7 @@ elif st.session_state.mode == 'voice':
                     if not lines:
                         lines = [{'qty': 1.0, 'description': 'Voice Dictated Printing Job', 'price': 0.0, 'st_rate': 18.0}]
                     
-                    # Trigger template engine compilation
+                    # Compile the PDF template
                     pdf_path = generate_invoice_pdf(meta, lines)
                     
                     st.balloons()
