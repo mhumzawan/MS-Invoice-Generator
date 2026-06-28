@@ -17,7 +17,7 @@ def generate_invoice_pdf(meta_data, line_items, output_filename="invoice.pdf"):
     # Custom Typographic Styles
     title_style = ParagraphStyle(
         'InvoiceTitle', parent=styles['Normal'],
-        fontName='Helvetica-Bold', fontSize=22, leading=16, alignment=1
+        fontName='Helvetica-Bold', fontSize=22, leading=30, alignment=1
     )
     header_style = ParagraphStyle(
         'HeaderStyle', parent=styles['Normal'],
