@@ -137,10 +137,16 @@ elif st.session_state.mode == 'voice':
                     api_key = str(st.secrets["GEMINI_API_KEY"]).strip().replace('"', '').replace("'", "")
                     audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
                     
-                    # Target endpoint matching official Gemini 2.5 REST guidelines
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+                    # FIX 1: Clean, raw endpoint URL WITHOUT the '?key=' query parameter appended
+                    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
                     
-                    # Refined payload structure ensuring clean multipart block delivery
+                    # FIX 2: Pass the API key securely through the mandated 'x-goog-api-key' header field instead
+                    headers = {
+                        "Content-Type": "application/json",
+                        "x-goog-api-key": api_key
+                    }
+                    
+                    # Refined payload structure remains the same
                     payload = {
                         "contents": [{
                             "parts": [
@@ -167,9 +173,8 @@ elif st.session_state.mode == 'voice':
                         }]
                     }
                     
-                    headers = {"Content-Type": "application/json"}
+                    # Send direct HTTP Post Request using the new header rule
                     response = requests.post(url, headers=headers, json=payload)
-                    response_json = response.json()
                     
                     # Safe check: Catch API errors (invalid key, bad file type, etc.) before digging into candidates
                     if "error" in response_json:
