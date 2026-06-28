@@ -129,7 +129,7 @@ def generate_invoice_pdf(meta_data, line_items, output_filename="invoice.pdf"):
     # 4. Authentication/Signature Blocks
     # This dynamically finds the folder where generator.py lives, ensuring it locates signature.png
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    sig_image_path = os.path.join(current_dir, "signature.png")  
+    sig_image_path = os.path.join(current_dir, "Signature.png")  
     
     if os.path.exists(sig_image_path):
         from reportlab.platypus import Image
@@ -137,7 +137,7 @@ def generate_invoice_pdf(meta_data, line_items, output_filename="invoice.pdf"):
     else:
         # If it still can't find it, it will fall back to this line safely
         sig_display = Paragraph("<b>Signature:</b> ____________________", ParagraphStyle('Sig', parent=cell_style, alignment=2))
-        
+
     # Compile the final layout block
     def draw_footer(canvas, doc):
         canvas.saveState()
