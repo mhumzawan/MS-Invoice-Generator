@@ -132,22 +132,20 @@ elif st.session_state.mode == 'voice':
                     import base64
                     import json
                     
-                    # 1. Clean and enforce strict string formatting on the secret token
+                    # 1. Isolate the API key strictly without structural quote pollution
                     api_key = str(st.secrets["GEMINI_API_KEY"]).strip().replace('"', '').replace("'", "")
                     audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
                     
-                    # 2. Targeted endpoint definition specifying version operations explicitly
+                    # 2. Base REST Endpoint 
                     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
                     
-                    # 3. Double-header payload architecture to prevent OAuth2 structural fallbacks
+                    # 3. Clean headers: NO OAuth or Bearer references to prevent Cloud Gateway interference
                     headers = {
                         "Content-Type": "application/json",
-                        "x-goog-api-key": api_key,
-                        "Authorization": f"Bearer {api_key}"  # Dual-auth mapping fallback to catch all gateway protocols
+                        "x-goog-api-key": api_key
                     }
                     
-                    # Rest of your payload configuration below remains exactly the same...
-                    # 4. Formatted structure payload
+                    # 4. JSON Schema mapping configuration
                     payload = {
                         "contents": [{
                             "parts": [
@@ -174,21 +172,19 @@ elif st.session_state.mode == 'voice':
                         }]
                     }
                     
-                    # 5. Initialize response object to None to prevent NameError scope bugs
                     response_json = None
-
                     response = requests.post(url, headers=headers, json=payload)
                     response_json = response.json()
                     
-                    # Catch structural API level errors immediately
+                    # Catch API level rejection codes
                     if "error" in response_json:
                         st.error(f"Gemini API Error: {response_json['error'].get('message', 'Unknown error context')}")
                         st.stop()
                     
-                    # Extract raw text from candidate arrays
+                    # Extract raw response text
                     raw_text = response_json['candidates'][0]['content']['parts'][0]['text']
                     
-                    # Clean up any accidental markdown blocks if the model included them anyway
+                    # Sanitize any accidental wrapper markers from markdown outputs
                     raw_text = raw_text.strip()
                     if raw_text.startswith("```json"):
                         raw_text = raw_text.replace("```json", "", 1).rstrip("```")
@@ -206,7 +202,7 @@ elif st.session_state.mode == 'voice':
                         'phone': invoice_data.get('phone', '')
                     }
                     
-                    # Map the extracted items to the generator
+                    # Build individual table item rows
                     lines = []
                     for item in invoice_data.get('line_items', []):
                         lines.append({
@@ -219,7 +215,7 @@ elif st.session_state.mode == 'voice':
                     if not lines:
                         lines = [{'qty': 1.0, 'description': 'Voice Dictated Printing Job', 'price': 0.0, 'st_rate': 18.0}]
                     
-                    # Compile the invoice PDF layout
+                    # Generate the PDF file layout using ReportLab
                     pdf_path = generate_invoice_pdf(meta, lines)
                     
                     st.balloons()
