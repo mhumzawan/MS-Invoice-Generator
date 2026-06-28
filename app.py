@@ -2,6 +2,8 @@ import streamlit as st
 import datetime
 from generator import generate_invoice_pdf
 
+GEMINI_API_KEY = "AQ.Ab8RN6LPaDkqOk3qRDyoK9d0F7EK-GDS0A2XuYkzRh_Ia4d0jg"
+
 # Initialize application settings and look-and-feel preferences
 st.set_page_config(page_title="Accessible Invoice Generator", layout="wide")
 st.title("🖨️ Printing Business Invoice Hub")
@@ -112,14 +114,103 @@ if st.session_state.mode == 'typing':
                 use_container_width=True
             )
 
-# --- OPTION B: AUDIO INGESTION SYSTEM BACKBONE ---
+# --- OPTION B: AUDIO INGESTION SYSTEM ---
 elif st.session_state.mode == 'voice':
     st.subheader("🎙️ Voice Automated Ledger Engine")
-    st.info("This system enables parsing of unstructured natural language into formatted structured invoice entities.")
+    st.info("Dictate invoice details naturally (e.g., 'Create a bill for Ali Raza, phone 03001234567, job is 500 brochures at 15 rupees each with 18 percent sales tax').")
     
-    # Audio capture interaction simulation
+    # 1. Ingest audio file
     audio_file = st.file_uploader("Upload or Record Audio Log File", type=["wav", "mp3", "m4a"])
     
     if audio_file:
+        # Accessing the bytes clears the Streamlit warning completely
+        audio_bytes = audio_file.read()
         st.success("Audio data packet ingested successfully.")
-        st.warning("Note: Next step is to link this pipeline directly to speech recognition / LLM inference logic.")
+        
+        if st.button("✨ Process Voice & Generate Invoice", type="primary", use_container_width=True):
+            with st.spinner("Analyzing audio context and generating document layout..."):
+                try:
+                    from google import genai
+                    from pydantic import BaseModel, Field
+                    import json
+                    
+                    # Initialize GenAI client using the Streamlit secret token
+                    api_key = st.secrets["GEMINI_API_KEY"]
+                    client = genai.Client(api_key=api_key)
+                    
+                    # Define strict structure schemas for the LLM output matching your fields
+                    class InvoiceLineItem(BaseModel):
+                        qty: float = Field(description="Quantity of the item")
+                        description: str = Field(description="Description of the printing job")
+                        price: float = Field(description="Price per unit / rate")
+                        st_rate: float = Field(default=18.0, description="Sales tax percentage rate")
+
+                    class VoiceInvoiceSchema(BaseModel):
+                        buyer_name: str = Field(default="", description="Name of the buyer/customer")
+                        bill_number: str = Field(default="", description="Bill or invoice number mentioned")
+                        po_number: str = Field(default="", description="Purchase order number if stated")
+                        phone: str = Field(default="", description="Phone number if mentioned")
+                        line_items: list[InvoiceLineItem] = Field(description="List of all printing jobs or items dictated")
+
+                    # Deliver the audio file payload directly to Gemini 2.5 Flash
+                    response = client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=[
+                            {
+                                "mime_type": audio_file.type,
+                                "data": audio_bytes
+                            },
+                            "Analyze this spoken invoice dictation. Extract the metadata fields and all operational line items into the structured schema. If details like Bill Number or PO number are missing, leave them blank."
+                        ],
+                        config=dict(
+                            response_mime_type="application/json",
+                            response_schema=VoiceInvoiceSchema,
+                        ),
+                    )
+                    
+                    # Parse extracted output map
+                    invoice_data = json.loads(response.text)
+                    
+                    # Format dynamic meta mapping variables
+                    meta = {
+                        'date': datetime.date.today().strftime("%d-%m-%Y"),
+                        'buyer_name': invoice_data.get('buyer_name', 'Voice Order'),
+                        'bill_number': invoice_data.get('bill_number', 'Voice-Draft'),
+                        'po_number': invoice_data.get('po_number', ''),
+                        'phone': invoice_data.get('phone', '')
+                    }
+                    
+                    # Compile the line item matrices
+                    lines = []
+                    for item in invoice_data.get('line_items', []):
+                        lines.append({
+                            'qty': item['qty'],
+                            'description': item['description'],
+                            'price': item['price'],
+                            'st_rate': item['st_rate']
+                        })
+                    
+                    # Fallback guard rule if no items were detected
+                    if not lines:
+                        lines = [{'qty': 1.0, 'description': 'Voice Dictated Printing Job', 'price': 0.0, 'st_rate': 18.0}]
+                    
+                    # Trigger your layout generator module directly
+                    pdf_path = generate_invoice_pdf(meta, lines)
+                    
+                    st.balloons()
+                    st.success("Invoice generated perfectly from voice dictation!")
+                    
+                    # Display summary verification for your father-in-law
+                    st.markdown(f"**Extracted Buyer:** {meta['buyer_name']} | **Total Items processed:** {len(lines)}")
+                    
+                    with open(pdf_path, "rb") as f:
+                        st.download_button(
+                            label="📥 Download Voice Generated Invoice PDF",
+                            data=f,
+                            file_name=f"Voice_Bill_{meta['bill_number']}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
+                        
+                except Exception as e:
+                    st.error(f"An error occurred while processing the audio: {str(e)}")
