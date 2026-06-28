@@ -121,7 +121,6 @@ elif st.session_state.mode == 'voice':
     audio_file = st.file_uploader("Upload or Record Audio Log File", type=["wav", "mp3", "m4a"])
     
     if audio_file:
-        # Crucial fix: Reset file reader pointer to the beginning before reading bytes
         audio_file.seek(0)
         audio_bytes = audio_file.read()
         st.success("Audio data packet ingested successfully.")
@@ -133,20 +132,19 @@ elif st.session_state.mode == 'voice':
                     import base64
                     import json
                     
-                    # Force-remove any hidden spaces, line breaks, or quotation marks from the secret string
+                    # 1. Clean and isolate the API key string
                     api_key = str(st.secrets["GEMINI_API_KEY"]).strip().replace('"', '').replace("'", "")
                     audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
                     
-                    # FIX 1: Clean, raw endpoint URL WITHOUT the '?key=' query parameter appended
+                    # 2. Compliant API endpoint configuration
                     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
                     
-                    # FIX 2: Pass the API key securely through the mandated 'x-goog-api-key' header field instead
                     headers = {
                         "Content-Type": "application/json",
                         "x-goog-api-key": api_key
                     }
                     
-                    # Refined payload structure remains the same
+                    # 3. Formatted structure payload
                     payload = {
                         "contents": [{
                             "parts": [
@@ -158,38 +156,37 @@ elif st.session_state.mode == 'voice':
                                 },
                                 {
                                     "text": (
-                                        "Analyze this spoken invoice dictation. Extract details into a JSON object matching this structure: "
-                                        "{"
-                                        "  \"buyer_name\": \"string\","
-                                        "  \"bill_number\": \"string\","
-                                        "  \"po_number\": \"string\","
-                                        "  \"phone\": \"string\","
-                                        "  \"line_items\": [{\"qty\": 1.0, \"description\": \"string\", \"price\": 0.0, \"st_rate\": 18.0}]"
-                                        "}"
-                                        "Respond strictly with valid JSON. Do not include markdown code block formatting."
+                                        "Analyze this spoken invoice dictation. Extract details into a JSON object matching this structure exactly: "
+                                        "{\n"
+                                        "  \"buyer_name\": \"string\",\n"
+                                        "  \"bill_number\": \"string\",\n"
+                                        "  \"po_number\": \"string\",\n"
+                                        "  \"phone\": \"string\",\n"
+                                        "  \"line_items\": [{\"qty\": 1.0, \"description\": \"string\", \"price\": 0.0, \"st_rate\": 18.0}]\n"
+                                        "}\n"
+                                        "Respond strictly with valid JSON. Do not include markdown code block formatting or backticks."
                                     )
                                 }
                             ]
                         }]
                     }
                     
-                    # Send direct HTTP Post Request using the new header rule
-                    response = requests.post(url, headers=headers, json=payload)
+                    # 4. Initialize response object to None to prevent NameError scope bugs
+                    response_json = None
                     
-                    # Safe check: Catch API errors (invalid key, bad file type, etc.) before digging into candidates
+                    response = requests.post(url, headers=headers, json=payload)
+                    response_json = response.json()
+                    
+                    # Catch structural API level errors immediately
                     if "error" in response_json:
                         st.error(f"Gemini API Error: {response_json['error'].get('message', 'Unknown error context')}")
                         st.stop()
                     
-                    # Extract the raw text safely
-                    try:
-                        raw_text = response_json['candidates'][0]['content']['parts'][0]['text']
-                    except KeyError:
-                        st.error("The model couldn't process the audio correctly. Try speaking more clearly or using a standard WAV/MP3 format.")
-                        st.write("API Response for debugging:", response_json)
-                        st.stop()
-                        
-                    # Clean up any residual json wrapping characters if present
+                    # Extract raw text from candidate arrays
+                    raw_text = response_json['candidates'][0]['content']['parts'][0]['text']
+                    
+                    # Clean up any accidental markdown blocks if the model included them anyway
+                    raw_text = raw_text.strip()
                     if raw_text.startswith("```json"):
                         raw_text = raw_text.replace("```json", "", 1).rstrip("```")
                     elif raw_text.startswith("```"):
@@ -197,7 +194,7 @@ elif st.session_state.mode == 'voice':
                         
                     invoice_data = json.loads(raw_text.strip())
                     
-                    # Format layout meta variables
+                    # Setup formatting metadata variables
                     meta = {
                         'date': datetime.date.today().strftime("%d-%m-%Y"),
                         'buyer_name': invoice_data.get('buyer_name', 'Voice Order'),
@@ -206,7 +203,7 @@ elif st.session_state.mode == 'voice':
                         'phone': invoice_data.get('phone', '')
                     }
                     
-                    # Compile extracted rows
+                    # Map the extracted items to the generator
                     lines = []
                     for item in invoice_data.get('line_items', []):
                         lines.append({
@@ -219,7 +216,7 @@ elif st.session_state.mode == 'voice':
                     if not lines:
                         lines = [{'qty': 1.0, 'description': 'Voice Dictated Printing Job', 'price': 0.0, 'st_rate': 18.0}]
                     
-                    # Compile the PDF template
+                    # Compile the invoice PDF layout
                     pdf_path = generate_invoice_pdf(meta, lines)
                     
                     st.balloons()
@@ -237,3 +234,5 @@ elif st.session_state.mode == 'voice':
                         
                 except Exception as e:
                     st.error(f"An error occurred while processing the audio: {str(e)}")
+                    if response_json is not None:
+                        st.write("API Response Log for Debugging:", response_json)
