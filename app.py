@@ -118,13 +118,13 @@ elif st.session_state.mode == 'voice':
     st.subheader("🎙️ Live Voice Automated Ledger Engine")
     st.info("Tap the recording button below, dictate invoice details naturally, and click stop when you are finished.")
     
-    # 1. Import and display the native on-screen microphone widget
-    from st_custom_components import audiorecorder
+    # FIX: Correct official import path for the streamlit-audio-recorder component
+    from audiorecorder import audiorecorder
     
-    # Renders Record/Stop buttons directly on the UI
+    # Renders the live interactive recording widget on the screen
     audio_data = audiorecorder("▶️ Click to Start Recording", "⏹️ Click to Stop & Process")
     
-    # The component returns a valid audio object once recording stops
+    # Process once the recording stops and contains valid data
     if len(audio_data) > 0:
         st.success("Voice packet captured successfully.")
         
@@ -135,15 +135,14 @@ elif st.session_state.mode == 'voice':
                     import json
                     import datetime
                     
-                    # 2. Extract raw audio bytes directly from the widget memory
-                    # The widget records natively in high-fidelity audio data
+                    # Extract raw WAV audio bytes from the recorder component
                     audio_bytes = audio_data.export().read()
                     
                     # Setup API credentials securely
                     api_key = str(st.secrets["GEMINI_API_KEY"]).strip().replace('"', '').replace("'", "")
                     genai.configure(api_key=api_key)
                     
-                    # 3. Format into a raw data blob matching the widget's native output format
+                    # Format into a data blob matching the widget's native WAV format
                     audio_blob = {
                         "mime_type": "audio/wav",
                         "data": audio_bytes
@@ -167,7 +166,7 @@ elif st.session_state.mode == 'voice':
                         "3. If details like Bill Number or PO are missing, leave them blank or create a short draft placeholder."
                     )
                     
-                    # Send direct payload block to Gemini 2.5 Flash
+                    # Send payload to Gemini 2.5 Flash
                     model = genai.GenerativeModel("gemini-2.5-flash")
                     response = model.generate_content([audio_blob, prompt_text])
                     
@@ -181,7 +180,7 @@ elif st.session_state.mode == 'voice':
                     
                     invoice_data = json.loads(raw_text.strip())
                     
-                    # 4. Map the AI-extracted fields directly to your document template
+                    # Map the AI-extracted fields directly to your document template
                     meta = {
                         'date': datetime.date.today().strftime("%d-%m-%Y"),
                         'buyer_name': invoice_data.get('buyer_name', 'Voice Order Customer'),
