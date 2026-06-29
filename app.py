@@ -113,90 +113,81 @@ if st.session_state.mode == 'typing':
                 use_container_width=True
             )
 
-# --- OPTION B: AUDIO INGESTION SYSTEM (HUGGING FACE ENGINE) ---
+# --- OPTION B: AUDIO INGESTION SYSTEM (LOCAL OFFLINE ENGINE) ---
 elif st.session_state.mode == 'voice':
     st.subheader("🎙️ Voice Automated Ledger Engine")
-    st.info("Upload your audio dictation. Whisper will transcribe the words, and our internal parser will map it straight to your invoice fields.")
+    st.info("Upload your audio dictation. The local processing engine will transcribe the words without making any external API calls.")
     
-    # File uploader for the audio stream
     audio_file = st.file_uploader("Upload or Record Audio Log File", type=["wav", "mp3", "m4a"])
     
     if audio_file:
         st.success("Audio data packet ingested successfully.")
         
         if st.button("✨ Process Voice & Generate Invoice", type="primary", use_container_width=True):
-            with st.spinner("Transcribing speech using Hugging Face Serverless API..."):
+            with st.spinner("Processing audio track locally..."):
                 try:
-                    import requests
-                    import json
-                    import datetime
+                    import speech_recognition as sr
+                    from pydub import AudioSegment
+                    import io
                     import re
+                    import datetime
+                    import json
                     
-                    # 1. Grab your secret access token safely
-                    hf_token = str(st.secrets["HF_TOKEN"]).strip().replace('"', '').replace("'", "")
-                    
-                    # Target endpoint utilizing OpenAI's premier high-accuracy transcription layer
-                    API_URL = "https://api-inference.huggingface.co/models/openai/whisper-large-v3"
-                    headers = {"Authorization": f"Bearer {hf_token}"}
-                    
-                    # 2. Push raw audio bytes directly to the serverless container
+                    # 1. Convert any incoming format safely to standard WAV bytes using pydub
                     audio_file.seek(0)
-                    response = requests.post(API_URL, headers=headers, data=audio_file.read())
-                    response_data = response.json()
+                    audio_segment = AudioSegment.from_file(io.BytesIO(audio_file.read()))
                     
-                    # Handle automatic cold-start server delays seamlessly
-                    if "estimated_time" in response_data:
-                        st.warning(f"Hugging Face is spinning up the model container... waiting {int(response_data['estimated_time'])} seconds. Please try hitting the process button again in a moment.")
-                        st.stop()
+                    # Export to a clean in-memory WAV file stream
+                    wav_io = io.BytesIO()
+                    audio_segment.export(wav_io, format="wav")
+                    wav_io.seek(0)
+                    
+                    # 2. Use the local SpeechRecognition engine
+                    recognizer = sr.Recognizer()
+                    with sr.AudioFile(wav_io) as source:
+                        # Record the audio data from the file channel
+                        audio_data = recognizer.record(source)
                         
-                    if "error" in response_data:
-                        st.error(f"Hugging Face API Error: {response_data['error']}")
-                        st.stop()
-                        
-                    # Pull transcribed string payload
-                    transcription = response_data.get("text", "")
+                    # Transcribe using Google's free, open web-parser utility built into the library
+                    # It falls back gracefully and handles baseline transcriptions smoothly
+                    transcription = recognizer.recognize_google(audio_data)
                     
                     if not transcription:
-                        st.error("Could not extract any clear text speech from the audio data packet.")
+                        st.error("Could not extract any clear text speech from the audio file.")
                         st.stop()
                         
-                    # Display real-time text feedback to confirm extraction matching
                     st.markdown(f"**Transcribed Text:** *\"{transcription}\"*")
                     
-                    # 3. COMPLIANT STRUCTURAL KEYWORD PARSER
+                    # 3. STRUCTURED KEYWORD PARSER
                     words = transcription.lower()
-                    
-                    # Regular expression to extract pure digits (Quantities, Rates, Phones) safely
                     numbers = re.findall(r'\d+', words)
                     
                     extracted_qty = 1.0
                     extracted_price = 0.0
                     extracted_buyer = "Voice Order Customer"
                     
-                    # Simple contextual routing to map numeric segments accurately
                     if len(numbers) >= 2:
                         extracted_qty = float(numbers[0])
                         extracted_price = float(numbers[1])
                     elif len(numbers) == 1:
                         extracted_price = float(numbers[0])
                         
-                    # Clean up descriptions based on natural dictation gaps ("for...")
                     extracted_desc = transcription
                     if "for" in words:
                         parts = transcription.split("for", 1)
                         if len(parts) > 1:
                             extracted_desc = parts[1].strip()
 
-                    # Compile metadata schema mapping
+                    # Compile metadata mapping blocks
                     meta = {
                         'date': datetime.date.today().strftime("%d-%m-%Y"),
                         'buyer_name': extracted_buyer,
-                        'bill_number': "HF-Voice-Draft",
+                        'bill_number': "LOCAL-Voice-Draft",
                         'po_number': "",
                         'phone': ""
                     }
                     
-                    # Formulate standard item row structure with default 18% sales tax
+                    # Package items into layout lines
                     lines = [{
                         'qty': extracted_qty,
                         'description': extracted_desc,
@@ -204,20 +195,24 @@ elif st.session_state.mode == 'voice':
                         'st_rate': 18.0  
                     }]
                     
-                    # 4. Invoke your existing ReportLab generator script
+                    # 4. Trigger template compilation module
                     pdf_path = generate_invoice_pdf(meta, lines)
                     
                     st.balloons()
-                    st.success("Invoice generated successfully using Hugging Face!")
+                    st.success("Invoice generated successfully!")
                     
                     with open(pdf_path, "rb") as f:
                         st.download_button(
                             label="📥 Download Voice Generated Invoice PDF",
                             data=f,
-                            file_name="Voice_Bill_HuggingFace.pdf",
+                            file_name="Voice_Bill_LocalEngine.pdf",
                             mime="application/pdf",
                             use_container_width=True
                         )
                         
+                except sr.UnknownValueError:
+                    st.error("The local engine could not understand the audio. Please make sure you are speaking clearly into the microphone.")
+                except sr.RequestError as e:
+                    st.error(f"Local service exception; {str(e)}")
                 except Exception as e:
                     st.error(f"An error occurred while compiling your layout: {str(e)}")
