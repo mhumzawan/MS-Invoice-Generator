@@ -113,10 +113,10 @@ if st.session_state.mode == 'typing':
                 use_container_width=True
             )
 
-# --- OPTION B: AUDIO INGESTION SYSTEM (LOCAL OFFLINE ENGINE) ---
+# --- OPTION B: AUDIO INGESTION SYSTEM (TRUE OFFLINE ENGINE) ---
 elif st.session_state.mode == 'voice':
-    st.subheader("🎙️ Voice Automated Ledger Engine")
-    st.info("Upload your audio dictation. The local processing engine will transcribe the words without making any external API calls.")
+    st.subheader("🎙️ Voice Automated Ledger Engine (True Offline)")
+    st.info("Upload your audio dictation. The local Vosk engine will process everything directly on the server without any external API calls.")
     
     audio_file = st.file_uploader("Upload or Record Audio Log File", type=["wav", "mp3", "m4a"])
     
@@ -124,36 +124,46 @@ elif st.session_state.mode == 'voice':
         st.success("Audio data packet ingested successfully.")
         
         if st.button("✨ Process Voice & Generate Invoice", type="primary", use_container_width=True):
-            with st.spinner("Processing audio track locally..."):
+            with st.spinner("Processing audio tracks on local CPU..."):
                 try:
-                    import speech_recognition as sr
+                    from vosk import Model, KaldiRecognizer
                     from pydub import AudioSegment
                     import io
                     import re
                     import datetime
                     import json
+                    import os
                     
-                    # 1. Convert any incoming format safely to standard WAV bytes using pydub
+                    # Verify model folder presence
+                    model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "model")
+                    if not os.path.exists(model_path):
+                        st.error("Offline speech engine directory structure missing. Please ensure the 'model' folder is pushed to GitHub.")
+                        st.stop()
+                    
+                    # 1. Standardize audio stream to Mono, 16000Hz WAV as required by local speech models
                     audio_file.seek(0)
                     audio_segment = AudioSegment.from_file(io.BytesIO(audio_file.read()))
+                    audio_segment = audio_segment.set_frame_rate(16000).set_channels(1)
                     
-                    # Export to a clean in-memory WAV file stream
                     wav_io = io.BytesIO()
                     audio_segment.export(wav_io, format="wav")
                     wav_io.seek(0)
                     
-                    # 2. Use the local SpeechRecognition engine
-                    recognizer = sr.Recognizer()
-                    with sr.AudioFile(wav_io) as source:
-                        # Record the audio data from the file channel
-                        audio_data = recognizer.record(source)
-                        
-                    # Transcribe using Google's free, open web-parser utility built into the library
-                    # It falls back gracefully and handles baseline transcriptions smoothly
-                    transcription = recognizer.recognize_google(audio_data)
+                    # Skip the 44-byte WAV header to feed raw PCM audio data directly to the recognizer
+                    raw_audio_data = wav_io.read()[44:]
+                    
+                    # 2. Initialize the local engine
+                    model = Model(model_path)
+                    recognizer = KaldiRecognizer(model, 16000)
+                    recognizer.SetWords(True)
+                    
+                    # Accept and process waveform chunk
+                    recognizer.AcceptWaveform(raw_audio_data)
+                    result_json = json.loads(recognizer.FinalResult())
+                    transcription = result_json.get("text", "")
                     
                     if not transcription:
-                        st.error("Could not extract any clear text speech from the audio file.")
+                        st.error("Local engine could not extract any words. Try speaking a bit slower or closer to the microphone.")
                         st.stop()
                         
                     st.markdown(f"**Transcribed Text:** *\"{transcription}\"*")
@@ -178,16 +188,16 @@ elif st.session_state.mode == 'voice':
                         if len(parts) > 1:
                             extracted_desc = parts[1].strip()
 
-                    # Compile metadata mapping blocks
+                    # Compile metadata schema mapping blocks
                     meta = {
                         'date': datetime.date.today().strftime("%d-%m-%Y"),
                         'buyer_name': extracted_buyer,
-                        'bill_number': "LOCAL-Voice-Draft",
+                        'bill_number': "OFFLINE-Voice-Draft",
                         'po_number': "",
                         'phone': ""
                     }
                     
-                    # Package items into layout lines
+                    # Build rows list matrix
                     lines = [{
                         'qty': extracted_qty,
                         'description': extracted_desc,
@@ -205,14 +215,10 @@ elif st.session_state.mode == 'voice':
                         st.download_button(
                             label="📥 Download Voice Generated Invoice PDF",
                             data=f,
-                            file_name="Voice_Bill_LocalEngine.pdf",
+                            file_name="Voice_Bill_OfflineEngine.pdf",
                             mime="application/pdf",
                             use_container_width=True
                         )
                         
-                except sr.UnknownValueError:
-                    st.error("The local engine could not understand the audio. Please make sure you are speaking clearly into the microphone.")
-                except sr.RequestError as e:
-                    st.error(f"Local service exception; {str(e)}")
                 except Exception as e:
                     st.error(f"An error occurred while compiling your layout: {str(e)}")
