@@ -113,35 +113,39 @@ if st.session_state.mode == 'typing':
                 use_container_width=True
             )
 
-# --- OPTION B: AUDIO INGESTION SYSTEM (STABLE GOOGLE AI ENGINE) ---
+# --- OPTION B: AUDIO INGESTION SYSTEM (LIVE VOICE RECORDER) ---
 elif st.session_state.mode == 'voice':
-    st.subheader("🎙️ Voice Automated Ledger Engine")
-    st.info("Dictate invoice details naturally (e.g., 'Create a bill for Ali Raza, phone 03001234567, job is 500 brochures at 15 rupees each with 18 percent sales tax').")
+    st.subheader("🎙️ Live Voice Automated Ledger Engine")
+    st.info("Tap the recording button below, dictate invoice details naturally, and click stop when you are finished.")
     
-    audio_file = st.file_uploader("Upload or Record Audio Log File", type=["wav", "mp3", "m4a"])
+    # 1. Import and display the native on-screen microphone widget
+    from st_custom_components import audiorecorder
     
-    if audio_file:
-        st.success("Audio data packet ingested successfully.")
+    # Renders Record/Stop buttons directly on the UI
+    audio_data = audiorecorder("▶️ Click to Start Recording", "⏹️ Click to Stop & Process")
+    
+    # The component returns a valid audio object once recording stops
+    if len(audio_data) > 0:
+        st.success("Voice packet captured successfully.")
         
-        if st.button("✨ Process Voice & Generate Invoice", type="primary", use_container_width=True):
-            with st.spinner("Analyzing audio tracking data and extracting invoice parameters..."):
+        if st.button("✨ Process Live Recording & Generate Invoice", type="primary", use_container_width=True):
+            with st.spinner("Analyzing vocal track and building layout parameters..."):
                 try:
                     import google.generativeai as genai
                     import json
-                    import re
                     import datetime
                     
-                    # 1. Setup API configuration using legacy stable library
+                    # 2. Extract raw audio bytes directly from the widget memory
+                    # The widget records natively in high-fidelity audio data
+                    audio_bytes = audio_data.export().read()
+                    
+                    # Setup API credentials securely
                     api_key = str(st.secrets["GEMINI_API_KEY"]).strip().replace('"', '').replace("'", "")
                     genai.configure(api_key=api_key)
                     
-                    # Read the raw audio bytes
-                    audio_file.seek(0)
-                    audio_bytes = audio_file.read()
-                    
-                    # 2. Format file into the official blob data structure
+                    # 3. Format into a raw data blob matching the widget's native output format
                     audio_blob = {
-                        "mime_type": audio_file.type,
+                        "mime_type": "audio/wav",
                         "data": audio_bytes
                     }
                     
@@ -160,16 +164,16 @@ elif st.session_state.mode == 'voice':
                         "Rules:\n"
                         "1. Respond ONLY with valid, parsable raw JSON. Do not include markdown formatting or ```json blocks.\n"
                         "2. Carefully capture South Asian names and phone numbers spoken in the track.\n"
-                        "3. If details like Bill Number or PO are missing, invent a reasonable short placeholder code or leave blank."
+                        "3. If details like Bill Number or PO are missing, leave them blank or create a short draft placeholder."
                     )
                     
-                    # 3. Call the model using standard legacy syntax
+                    # Send direct payload block to Gemini 2.5 Flash
                     model = genai.GenerativeModel("gemini-2.5-flash")
                     response = model.generate_content([audio_blob, prompt_text])
                     
                     raw_text = response.text.strip()
                     
-                    # Sanitize code blocks if the model accidentally outputted them anyway
+                    # Sanitize structural code blocks if present
                     if raw_text.startswith("```json"):
                         raw_text = raw_text.replace("```json", "", 1).rstrip("```")
                     elif raw_text.startswith("```"):
@@ -177,11 +181,11 @@ elif st.session_state.mode == 'voice':
                     
                     invoice_data = json.loads(raw_text.strip())
                     
-                    # 4. Map the intelligent JSON fields directly to the document metadata
+                    # 4. Map the AI-extracted fields directly to your document template
                     meta = {
                         'date': datetime.date.today().strftime("%d-%m-%Y"),
                         'buyer_name': invoice_data.get('buyer_name', 'Voice Order Customer'),
-                        'bill_number': invoice_data.get('bill_number', 'GEMINI-DRAFT'),
+                        'bill_number': invoice_data.get('bill_number', 'LIVE-VOICE'),
                         'po_number': invoice_data.get('po_number', ''),
                         'phone': invoice_data.get('phone', '')
                     }
@@ -198,11 +202,11 @@ elif st.session_state.mode == 'voice':
                     if not lines:
                         lines = [{'qty': 1.0, 'description': 'Voice Dictated Printing Job', 'price': 0.0, 'st_rate': 18.0}]
                     
-                    # Compile the final layout PDF using ReportLab
+                    # Pass compiled matrices to your ReportLab PDF module
                     pdf_path = generate_invoice_pdf(meta, lines)
                     
                     st.balloons()
-                    st.success("Invoice generated perfectly with advanced speech modeling!")
+                    st.success("Invoice generated perfectly from live voice audio!")
                     st.markdown(f"**Extracted Buyer Name:** {meta['buyer_name']} | **Total Calculated Lines:** {len(lines)}")
                     
                     with open(pdf_path, "rb") as f:
