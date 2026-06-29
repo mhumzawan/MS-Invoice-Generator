@@ -113,19 +113,15 @@ if st.session_state.mode == 'typing':
                 use_container_width=True
             )
 
-# --- OPTION B: AUDIO INGESTION SYSTEM (LIVE VOICE RECORDER) ---
+# --- OPTION B: AUDIO INGESTION SYSTEM (NATIVE STREAMLIT MIC) ---
 elif st.session_state.mode == 'voice':
     st.subheader("🎙️ Live Voice Automated Ledger Engine")
-    st.info("Tap the microphone below to start recording, dictate details naturally, and tap it again to stop and process.")
+    st.info("Tap the microphone icon below to record your dictation. Once finished, click the process button.")
     
-    # 1. Initialize the modern waveform recording widget
-    from audiorecorder import audiorecorder
+    # Use Streamlit's official built-in recording widget
+    audio_file = st.audio_input("Record your invoice dictation here")
     
-    # Renders an elegant mobile-first record/stop interface
-    audio_data = audiorecorder("", "")
-    
-    # Process only when a valid audio track is completed
-    if audio_data and len(audio_data) > 0:
+    if audio_file:
         st.success("Voice recording captured successfully!")
         
         if st.button("✨ Process Live Recording & Generate Invoice", type="primary", use_container_width=True):
@@ -134,20 +130,18 @@ elif st.session_state.mode == 'voice':
                     import google.generativeai as genai
                     import json
                     import datetime
-                    import io
                     
-                    # 2. Export raw WAV bytes cleanly from the widget memory map
-                    wav_buffer = io.BytesIO()
-                    audio_data.export(wav_buffer, format="wav")
-                    audio_bytes = wav_buffer.getvalue()
+                    # Extract raw bytes directly from the native recording widget
+                    audio_file.seek(0)
+                    audio_bytes = audio_file.read()
                     
                     # Setup API credentials securely
                     api_key = str(st.secrets["GEMINI_API_KEY"]).strip().replace('"', '').replace("'", "")
                     genai.configure(api_key=api_key)
                     
-                    # Format data blob for Gemini
+                    # Pass the audio directly to Gemini (handles standard browser audio types automatically)
                     audio_blob = {
-                        "mime_type": "audio/wav",
+                        "mime_type": audio_file.type,
                         "data": audio_bytes
                     }
                     
@@ -169,7 +163,7 @@ elif st.session_state.mode == 'voice':
                         "3. If details like Bill Number or PO are missing, leave them blank or create a short draft placeholder."
                     )
                     
-                    # 3. Transcribe and parse with Gemini 2.5 Flash
+                    # Transcribe and parse with Gemini 2.5 Flash
                     model = genai.GenerativeModel("gemini-2.5-flash")
                     response = model.generate_content([audio_blob, prompt_text])
                     
@@ -183,7 +177,7 @@ elif st.session_state.mode == 'voice':
                     
                     invoice_data = json.loads(raw_text.strip())
                     
-                    # 4. Map the AI-extracted fields directly to your document template
+                    # Map the AI-extracted fields directly to your document template
                     meta = {
                         'date': datetime.date.today().strftime("%d-%m-%Y"),
                         'buyer_name': invoice_data.get('buyer_name', 'Voice Order Customer'),
@@ -208,7 +202,7 @@ elif st.session_state.mode == 'voice':
                     pdf_path = generate_invoice_pdf(meta, lines)
                     
                     st.balloons()
-                    st.success("Invoice generated perfectly from live audio microphone!")
+                    st.success("Invoice generated perfectly from native mic input!")
                     st.markdown(f"**Extracted Buyer Name:** {meta['buyer_name']} | **Total Calculated Lines:** {len(lines)}")
                     
                     with open(pdf_path, "rb") as f:
