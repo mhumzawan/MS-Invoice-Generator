@@ -113,109 +113,114 @@ if st.session_state.mode == 'typing':
                 use_container_width=True
             )
 
-# --- OPTION B: AUDIO INGESTION SYSTEM (LIVE VOICE RECORDER) ---
+# --- OPTION B: AUDIO INGESTION SYSTEM (LIVE MIC RECORDER) ---
 elif st.session_state.mode == 'voice':
     st.subheader("🎙️ Live Voice Automated Ledger Engine")
-    st.info("Tap the recording button below, dictate invoice details naturally, and click stop when you are finished.")
+    st.info("Click 'Start recording', dictate invoice details naturally, and click 'Stop' when you are finished.")
     
-    # FIX: Correct official import path for the streamlit-audio-recorder component
-    from audiorecorder import audiorecorder
+    # 1. Import and render the stable mic recorder component
+    from streamlit_mic_recorder import mic_recorder
     
-    # Renders the live interactive recording widget on the screen
-    audio_data = audiorecorder("▶️ Click to Start Recording", "⏹️ Click to Stop & Process")
+    # This renders a clean interactive UI widget with a live microphone indicator
+    audio_packet = mic_recorder(
+        start_prompt="🎙️ Start Recording",
+        stop_prompt="🛑 Stop & Process Invoice",
+        just_once=False,
+        use_container_width=True,
+        key='invoice_mic'
+    )
     
-    # Process once the recording stops and contains valid data
-    if len(audio_data) > 0:
-        st.success("Voice packet captured successfully.")
+    # Check if a valid audio recording stream was stopped and captured
+    if audio_packet and 'bytes' in audio_packet:
+        st.success("Voice recording captured successfully!")
         
-        if st.button("✨ Process Live Recording & Generate Invoice", type="primary", use_container_width=True):
-            with st.spinner("Analyzing vocal track and building layout parameters..."):
-                try:
-                    import google.generativeai as genai
-                    import json
-                    import datetime
-                    
-                    # Extract raw WAV audio bytes from the recorder component
-                    audio_bytes = audio_data.export().read()
-                    
-                    # Setup API credentials securely
-                    api_key = str(st.secrets["GEMINI_API_KEY"]).strip().replace('"', '').replace("'", "")
-                    genai.configure(api_key=api_key)
-                    
-                    # Format into a data blob matching the widget's native WAV format
-                    audio_blob = {
-                        "mime_type": "audio/wav",
-                        "data": audio_bytes
-                    }
-                    
-                    prompt_text = (
-                        "Listen carefully to this spoken invoice dictation. Extract the billing information and "
-                        "return a strictly structured JSON object matching this schema:\n\n"
-                        "{\n"
-                        "  \"buyer_name\": \"string\",\n"
-                        "  \"bill_number\": \"string\",\n"
-                        "  \"po_number\": \"string\",\n"
-                        "  \"phone\": \"string\",\n"
-                        "  \"line_items\": [\n"
-                        "    {\"qty\": 1.0, \"description\": \"string\", \"price\": 0.0, \"st_rate\": 18.0}\n"
-                        "  ]\n"
-                        "}\n\n"
-                        "Rules:\n"
-                        "1. Respond ONLY with valid, parsable raw JSON. Do not include markdown formatting or ```json blocks.\n"
-                        "2. Carefully capture South Asian names and phone numbers spoken in the track.\n"
-                        "3. If details like Bill Number or PO are missing, leave them blank or create a short draft placeholder."
+        with st.spinner("Analyzing vocal track with Gemini 2.5 Flash..."):
+            try:
+                import google.generativeai as genai
+                import json
+                import datetime
+                
+                # Extract raw audio data bytes straight from the widget memory map
+                audio_bytes = audio_packet['bytes']
+                
+                # Setup API credentials securely
+                api_key = str(st.secrets["GEMINI_API_KEY"]).strip().replace('"', '').replace("'", "")
+                genai.configure(api_key=api_key)
+                
+                # Format into a secure data blob matching the widget's native audio stream format
+                audio_blob = {
+                    "mime_type": "audio/wav",
+                    "data": audio_bytes
+                }
+                
+                prompt_text = (
+                    "Listen carefully to this spoken invoice dictation. Extract the billing information and "
+                    "return a strictly structured JSON object matching this schema:\n\n"
+                    "{\n"
+                    "  \"buyer_name\": \"string\",\n"
+                    "  \"bill_number\": \"string\",\n"
+                    "  \"po_number\": \"string\",\n"
+                    "  \"phone\": \"string\",\n"
+                    "  \"line_items\": [\n"
+                    "    {\"qty\": 1.0, \"description\": \"string\", \"price\": 0.0, \"st_rate\": 18.0}\n"
+                    "  ]\n"
+                    "}\n\n"
+                    "Rules:\n"
+                    "1. Respond ONLY with valid, parsable raw JSON. Do not include markdown formatting or ```json blocks.\n"
+                    "2. Carefully capture South Asian names and phone numbers spoken in the track.\n"
+                    "3. If details like Bill Number or PO are missing, leave them blank or create a short draft placeholder."
+                )
+                
+                # Feed raw multi-modal layout directly to Gemini 2.5 Flash
+                model = genai.GenerativeModel("gemini-2.5-flash")
+                response = model.generate_content([audio_blob, prompt_text])
+                
+                raw_text = response.text.strip()
+                
+                # Sanitize structural code blocks if present
+                if raw_text.startswith("```json"):
+                    raw_text = raw_text.replace("```json", "", 1).rstrip("```")
+                elif raw_text.startswith("```"):
+                    raw_text = raw_text.replace("```", "", 1).rstrip("```")
+                
+                invoice_data = json.loads(raw_text.strip())
+                
+                # Map the AI-extracted fields directly to your document template
+                meta = {
+                    'date': datetime.date.today().strftime("%d-%m-%Y"),
+                    'buyer_name': invoice_data.get('buyer_name', 'Voice Order Customer'),
+                    'bill_number': invoice_data.get('bill_number', 'LIVE-MIC-DRAFT'),
+                    'po_number': invoice_data.get('po_number', ''),
+                    'phone': invoice_data.get('phone', '')
+                }
+                
+                lines = []
+                for item in invoice_data.get('line_items', []):
+                    lines.append({
+                        'qty': float(item.get('qty', 1)),
+                        'description': item.get('description', 'Printing Job Order'),
+                        'price': float(item.get('price', 0)),
+                        'st_rate': float(item.get('st_rate', 18))
+                    })
+                
+                if not lines:
+                    lines = [{'qty': 1.0, 'description': 'Voice Dictated Printing Job', 'price': 0.0, 'st_rate': 18.0}]
+                
+                # Pass compiled matrices to your ReportLab PDF module
+                pdf_path = generate_invoice_pdf(meta, lines)
+                
+                st.balloons()
+                st.success("Invoice generated perfectly from live audio mic layout!")
+                st.markdown(f"**Extracted Buyer Name:** {meta['buyer_name']} | **Total Calculated Lines:** {len(lines)}")
+                
+                with open(pdf_path, "rb") as f:
+                    st.download_button(
+                        label="📥 Download Voice Generated Invoice PDF",
+                        data=f,
+                        file_name=f"Voice_Bill_{meta['bill_number']}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
                     )
                     
-                    # Send payload to Gemini 2.5 Flash
-                    model = genai.GenerativeModel("gemini-2.5-flash")
-                    response = model.generate_content([audio_blob, prompt_text])
-                    
-                    raw_text = response.text.strip()
-                    
-                    # Sanitize structural code blocks if present
-                    if raw_text.startswith("```json"):
-                        raw_text = raw_text.replace("```json", "", 1).rstrip("```")
-                    elif raw_text.startswith("```"):
-                        raw_text = raw_text.replace("```", "", 1).rstrip("```")
-                    
-                    invoice_data = json.loads(raw_text.strip())
-                    
-                    # Map the AI-extracted fields directly to your document template
-                    meta = {
-                        'date': datetime.date.today().strftime("%d-%m-%Y"),
-                        'buyer_name': invoice_data.get('buyer_name', 'Voice Order Customer'),
-                        'bill_number': invoice_data.get('bill_number', 'LIVE-VOICE'),
-                        'po_number': invoice_data.get('po_number', ''),
-                        'phone': invoice_data.get('phone', '')
-                    }
-                    
-                    lines = []
-                    for item in invoice_data.get('line_items', []):
-                        lines.append({
-                            'qty': float(item.get('qty', 1)),
-                            'description': item.get('description', 'Printing Job Order'),
-                            'price': float(item.get('price', 0)),
-                            'st_rate': float(item.get('st_rate', 18))
-                        })
-                    
-                    if not lines:
-                        lines = [{'qty': 1.0, 'description': 'Voice Dictated Printing Job', 'price': 0.0, 'st_rate': 18.0}]
-                    
-                    # Pass compiled matrices to your ReportLab PDF module
-                    pdf_path = generate_invoice_pdf(meta, lines)
-                    
-                    st.balloons()
-                    st.success("Invoice generated perfectly from live voice audio!")
-                    st.markdown(f"**Extracted Buyer Name:** {meta['buyer_name']} | **Total Calculated Lines:** {len(lines)}")
-                    
-                    with open(pdf_path, "rb") as f:
-                        st.download_button(
-                            label="📥 Download Voice Generated Invoice PDF",
-                            data=f,
-                            file_name=f"Voice_Bill_{meta['bill_number']}.pdf",
-                            mime="application/pdf",
-                            use_container_width=True
-                        )
-                        
-                except Exception as e:
-                    st.error(f"An error occurred while compiling your layout: {str(e)}")
+            except Exception as e:
+                st.error(f"An error occurred while compiling your layout: {str(e)}")
