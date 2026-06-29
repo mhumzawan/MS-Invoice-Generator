@@ -113,10 +113,10 @@ if st.session_state.mode == 'typing':
                 use_container_width=True
             )
 
-# --- OPTION B: AUDIO INGESTION SYSTEM (TRUE OFFLINE ENGINE) ---
+# --- OPTION B: AUDIO INGESTION SYSTEM (STABLE GOOGLE AI ENGINE) ---
 elif st.session_state.mode == 'voice':
-    st.subheader("🎙️ Voice Automated Ledger Engine (True Offline)")
-    st.info("Upload your audio dictation. The local Vosk engine will process everything directly on the server without any external API calls.")
+    st.subheader("🎙️ Voice Automated Ledger Engine")
+    st.info("Dictate invoice details naturally (e.g., 'Create a bill for Ali Raza, phone 03001234567, job is 500 brochures at 15 rupees each with 18 percent sales tax').")
     
     audio_file = st.file_uploader("Upload or Record Audio Log File", type=["wav", "mp3", "m4a"])
     
@@ -124,98 +124,92 @@ elif st.session_state.mode == 'voice':
         st.success("Audio data packet ingested successfully.")
         
         if st.button("✨ Process Voice & Generate Invoice", type="primary", use_container_width=True):
-            with st.spinner("Processing audio tracks on local CPU..."):
+            with st.spinner("Analyzing audio tracking data and extracting invoice parameters..."):
                 try:
-                    from vosk import Model, KaldiRecognizer
-                    from pydub import AudioSegment
-                    import io
+                    import google.generativeai as genai
+                    import json
                     import re
                     import datetime
-                    import json
-                    import os
                     
-                    # Verify model folder presence
-                    model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "model")
-                    if not os.path.exists(model_path):
-                        st.error("Offline speech engine directory structure missing. Please ensure the 'model' folder is pushed to GitHub.")
-                        st.stop()
+                    # 1. Setup API configuration using legacy stable library
+                    api_key = str(st.secrets["GEMINI_API_KEY"]).strip().replace('"', '').replace("'", "")
+                    genai.configure(api_key=api_key)
                     
-                    # 1. Standardize audio stream to Mono, 16000Hz WAV as required by local speech models
+                    # Read the raw audio bytes
                     audio_file.seek(0)
-                    audio_segment = AudioSegment.from_file(io.BytesIO(audio_file.read()))
-                    audio_segment = audio_segment.set_frame_rate(16000).set_channels(1)
+                    audio_bytes = audio_file.read()
                     
-                    wav_io = io.BytesIO()
-                    audio_segment.export(wav_io, format="wav")
-                    wav_io.seek(0)
-                    
-                    # Skip the 44-byte WAV header to feed raw PCM audio data directly to the recognizer
-                    raw_audio_data = wav_io.read()[44:]
-                    
-                    # 2. Initialize the local engine
-                    model = Model(model_path)
-                    recognizer = KaldiRecognizer(model, 16000)
-                    recognizer.SetWords(True)
-                    
-                    # Accept and process waveform chunk
-                    recognizer.AcceptWaveform(raw_audio_data)
-                    result_json = json.loads(recognizer.FinalResult())
-                    transcription = result_json.get("text", "")
-                    
-                    if not transcription:
-                        st.error("Local engine could not extract any words. Try speaking a bit slower or closer to the microphone.")
-                        st.stop()
-                        
-                    st.markdown(f"**Transcribed Text:** *\"{transcription}\"*")
-                    
-                    # 3. STRUCTURED KEYWORD PARSER
-                    words = transcription.lower()
-                    numbers = re.findall(r'\d+', words)
-                    
-                    extracted_qty = 1.0
-                    extracted_price = 0.0
-                    extracted_buyer = "Voice Order Customer"
-                    
-                    if len(numbers) >= 2:
-                        extracted_qty = float(numbers[0])
-                        extracted_price = float(numbers[1])
-                    elif len(numbers) == 1:
-                        extracted_price = float(numbers[0])
-                        
-                    extracted_desc = transcription
-                    if "for" in words:
-                        parts = transcription.split("for", 1)
-                        if len(parts) > 1:
-                            extracted_desc = parts[1].strip()
-
-                    # Compile metadata schema mapping blocks
-                    meta = {
-                        'date': datetime.date.today().strftime("%d-%m-%Y"),
-                        'buyer_name': extracted_buyer,
-                        'bill_number': "OFFLINE-Voice-Draft",
-                        'po_number': "",
-                        'phone': ""
+                    # 2. Format file into the official blob data structure
+                    audio_blob = {
+                        "mime_type": audio_file.type,
+                        "data": audio_bytes
                     }
                     
-                    # Build rows list matrix
-                    lines = [{
-                        'qty': extracted_qty,
-                        'description': extracted_desc,
-                        'price': extracted_price,
-                        'st_rate': 18.0  
-                    }]
+                    prompt_text = (
+                        "Listen carefully to this spoken invoice dictation. Extract the billing information and "
+                        "return a strictly structured JSON object matching this schema:\n\n"
+                        "{\n"
+                        "  \"buyer_name\": \"string\",\n"
+                        "  \"bill_number\": \"string\",\n"
+                        "  \"po_number\": \"string\",\n"
+                        "  \"phone\": \"string\",\n"
+                        "  \"line_items\": [\n"
+                        "    {\"qty\": 1.0, \"description\": \"string\", \"price\": 0.0, \"st_rate\": 18.0}\n"
+                        "  ]\n"
+                        "}\n\n"
+                        "Rules:\n"
+                        "1. Respond ONLY with valid, parsable raw JSON. Do not include markdown formatting or ```json blocks.\n"
+                        "2. Carefully capture South Asian names and phone numbers spoken in the track.\n"
+                        "3. If details like Bill Number or PO are missing, invent a reasonable short placeholder code or leave blank."
+                    )
                     
-                    # 4. Trigger template compilation module
+                    # 3. Call the model using standard legacy syntax
+                    model = genai.GenerativeModel("gemini-1.5-flash")
+                    response = model.generate_content([audio_blob, prompt_text])
+                    
+                    raw_text = response.text.strip()
+                    
+                    # Sanitize code blocks if the model accidentally outputted them anyway
+                    if raw_text.startswith("```json"):
+                        raw_text = raw_text.replace("```json", "", 1).rstrip("```")
+                    elif raw_text.startswith("```"):
+                        raw_text = raw_text.replace("```", "", 1).rstrip("```")
+                    
+                    invoice_data = json.loads(raw_text.strip())
+                    
+                    # 4. Map the intelligent JSON fields directly to the document metadata
+                    meta = {
+                        'date': datetime.date.today().strftime("%d-%m-%Y"),
+                        'buyer_name': invoice_data.get('buyer_name', 'Voice Order Customer'),
+                        'bill_number': invoice_data.get('bill_number', 'GEMINI-DRAFT'),
+                        'po_number': invoice_data.get('po_number', ''),
+                        'phone': invoice_data.get('phone', '')
+                    }
+                    
+                    lines = []
+                    for item in invoice_data.get('line_items', []):
+                        lines.append({
+                            'qty': float(item.get('qty', 1)),
+                            'description': item.get('description', 'Printing Job Order'),
+                            'price': float(item.get('price', 0)),
+                            'st_rate': float(item.get('st_rate', 18))
+                        })
+                    
+                    if not lines:
+                        lines = [{'qty': 1.0, 'description': 'Voice Dictated Printing Job', 'price': 0.0, 'st_rate': 18.0}]
+                    
+                    # Compile the final layout PDF using ReportLab
                     pdf_path = generate_invoice_pdf(meta, lines)
                     
                     st.balloons()
-                    st.success("Invoice generated successfully!")
+                    st.success("Invoice generated perfectly with advanced speech modeling!")
+                    st.markdown(f"**Extracted Buyer Name:** {meta['buyer_name']} | **Total Calculated Lines:** {len(lines)}")
                     
                     with open(pdf_path, "rb") as f:
                         st.download_button(
                             label="📥 Download Voice Generated Invoice PDF",
                             data=f,
-                            file_name="Voice_Bill_OfflineEngine.pdf",
+                            file_name=f"Voice_Bill_{meta['bill_number']}.pdf",
                             mime="application/pdf",
                             use_container_width=True
                         )
