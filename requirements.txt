@@ -1,5 +1,5 @@
 streamlit==1.35.0
 reportlab==4.2.0
 pydantic==2.7.1
-SpeechRecognition==3.10.4
 pydub==0.25.1
+vosk==0.3.45
