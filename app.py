@@ -164,7 +164,7 @@ elif st.session_state.mode == 'voice':
                     )
                     
                     # 3. Call the model using standard legacy syntax
-                    model = genai.GenerativeModel("gemini-1.5-flash")
+                    model = genai.GenerativeModel("gemini-2.5-flash")
                     response = model.generate_content([audio_blob, prompt_text])
                     
                     raw_text = response.text.strip()
