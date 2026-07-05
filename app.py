@@ -125,7 +125,7 @@ elif st.session_state.mode == 'voice':
     """, unsafe_allow_html=True)
 
     # Clean, distraction-free headers
-    st.subheader("🎙️ Voice Billing")
+    st.subheader("Voice Billing")
     
     # 1. Native Mobile-Responsive Microphone Stream
     audio_file = st.audio_input("Tap Microphone to Record Dictation")
