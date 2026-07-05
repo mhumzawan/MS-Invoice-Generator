@@ -219,7 +219,7 @@ elif st.session_state.mode == 'voice':
                     
                     with open(pdf_path, "rb") as f:
                         st.download_button(
-                            label="📥 Save PDF Invoice to iPhone",
+                            label="Save PDF Invoice to iPhone",
                             data=f,
                             file_name=f"Invoice_{meta['bill_number']}.pdf",
                             mime="application/pdf",
