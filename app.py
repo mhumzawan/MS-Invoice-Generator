@@ -115,14 +115,14 @@ if st.session_state.mode == 'typing':
 
 # --- OPTION B: AUDIO INGESTION SYSTEM (NATIVE STREAMLIT MIC) ---
 elif st.session_state.mode == 'voice':
-    # Custom CSS injected locally to optimize mobile spacing, center buttons, and hide margins
+    # FIX: Corrected the parameter name to unsafe_allow_html=True
     st.markdown("""
         <style>
             .block-container { padding-top: 1.5rem; padding-bottom: 1rem; }
             div[data-testid="stFormSubmitButton"] > button { width: 100%; }
             .stAudioInput { margin-bottom: 10px; }
         </style>
-    """, unsafe_base_with_rows=True)
+    """, unsafe_allow_html=True)
 
     # Clean, distraction-free headers
     st.subheader("🎙️ Voice Billing")
@@ -131,7 +131,7 @@ elif st.session_state.mode == 'voice':
     audio_file = st.audio_input("Tap Microphone to Record Dictation")
     
     if audio_file:
-        # A simple, clean divider instead of heavy success boxes
+        # A simple, clean divider instead of heavy boxes
         st.write("---")
         
         # Large, touch-friendly primary button for mobile thumbs
