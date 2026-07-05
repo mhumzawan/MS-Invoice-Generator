@@ -16,10 +16,10 @@ if 'rows' not in st.session_state:
 # Structural Mode Selectors
 col_btn1, col_btn2 = st.columns(2)
 with col_btn1:
-    if st.button("⌨️ Create Invoice by Typing", use_container_width=True):
+    if st.button("⌨Create Invoice by Typing", use_container_width=True):
         st.session_state.mode = 'typing'
 with col_btn2:
-    if st.button("🎙️ Create Invoice by Voice", use_container_width=True):
+    if st.button("Create Invoice by Voice", use_container_width=True):
         st.session_state.mode = 'voice'
 
 st.divider()
@@ -115,7 +115,7 @@ if st.session_state.mode == 'typing':
 
 # --- OPTION B: AUDIO INGESTION SYSTEM (NATIVE STREAMLIT MIC) ---
 elif st.session_state.mode == 'voice':
-    st.subheader("🎙️ Live Voice Automated Ledger Engine")
+    st.subheader("Live Voice Automated Ledger Engine")
     st.info("Tap the microphone icon below to record your dictation. Once finished, click the process button.")
     
     # Use Streamlit's official built-in recording widget
