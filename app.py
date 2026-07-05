@@ -5,7 +5,7 @@ from generator import generate_invoice_pdf
 
 # Initialize application settings and look-and-feel preferences
 st.set_page_config(page_title="Accessible Invoice Generator", layout="wide")
-st.title("🖨️ Printing Business Invoice Hub")
+st.title("Printing Business Invoice Hub")
 
 # Persistent Session State Initializations
 if 'mode' not in st.session_state:
@@ -16,7 +16,7 @@ if 'rows' not in st.session_state:
 # Structural Mode Selectors
 col_btn1, col_btn2 = st.columns(2)
 with col_btn1:
-    if st.button("⌨Create Invoice by Typing", use_container_width=True):
+    if st.button("Create Invoice by Typing", use_container_width=True):
         st.session_state.mode = 'typing'
 with col_btn2:
     if st.button("Create Invoice by Voice", use_container_width=True):
@@ -115,17 +115,28 @@ if st.session_state.mode == 'typing':
 
 # --- OPTION B: AUDIO INGESTION SYSTEM (NATIVE STREAMLIT MIC) ---
 elif st.session_state.mode == 'voice':
-    st.subheader("Live Voice Automated Ledger Engine")
-    st.info("Tap the microphone icon below to record your dictation. Once finished, click the process button.")
+    # Custom CSS injected locally to optimize mobile spacing, center buttons, and hide margins
+    st.markdown("""
+        <style>
+            .block-container { padding-top: 1.5rem; padding-bottom: 1rem; }
+            div[data-testid="stFormSubmitButton"] > button { width: 100%; }
+            .stAudioInput { margin-bottom: 10px; }
+        </style>
+    """, unsafe_base_with_rows=True)
+
+    # Clean, distraction-free headers
+    st.subheader("🎙️ Voice Billing")
     
-    # Use Streamlit's official built-in recording widget
-    audio_file = st.audio_input("Record your invoice dictation here")
+    # 1. Native Mobile-Responsive Microphone Stream
+    audio_file = st.audio_input("Tap Microphone to Record Dictation")
     
     if audio_file:
-        st.success("Voice recording captured successfully!")
+        # A simple, clean divider instead of heavy success boxes
+        st.write("---")
         
-        if st.button("✨ Process Live Recording & Generate Invoice", type="primary", use_container_width=True):
-            with st.spinner("Analyzing vocal track with Gemini 2.5 Flash..."):
+        # Large, touch-friendly primary button for mobile thumbs
+        if st.button("✨ Click to Generate Invoice", type="primary", use_container_width=True):
+            with st.spinner("Processing voice data..."):
                 try:
                     import google.generativeai as genai
                     import json
@@ -202,17 +213,18 @@ elif st.session_state.mode == 'voice':
                     pdf_path = generate_invoice_pdf(meta, lines)
                     
                     st.balloons()
-                    st.success("Invoice generated perfectly from native mic input!")
-                    st.markdown(f"**Extracted Buyer Name:** {meta['buyer_name']} | **Total Calculated Lines:** {len(lines)}")
+                    
+                    # Clean confirmation and immediate big action button
+                    st.success(f"Invoice for {meta['buyer_name']} Ready!")
                     
                     with open(pdf_path, "rb") as f:
                         st.download_button(
-                            label="📥 Download Voice Generated Invoice PDF",
+                            label="📥 Save PDF Invoice to iPhone",
                             data=f,
-                            file_name=f"Voice_Bill_{meta['bill_number']}.pdf",
+                            file_name=f"Invoice_{meta['bill_number']}.pdf",
                             mime="application/pdf",
                             use_container_width=True
                         )
                         
                 except Exception as e:
-                    st.error(f"An error occurred while compiling your layout: {str(e)}")
+                    st.error(f"Error compiling invoice: {str(e)}")
