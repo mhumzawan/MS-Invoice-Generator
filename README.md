@@ -16,9 +16,10 @@ Sales-tax invoice generator for **Management Services**. It's a static web app h
    - `GEMINI_MODEL`: optional, defaults to `gemini-2.5-flash`.
 4. Deploy. Changes to environment variables need a redeploy before they take effect.
 
+The old Streamlit version (app.py, generator.py) is in the git history before this branch.
+
 ## Layout
 ```
 public/                 static site (index.html, invoice-pdf.js, Signature.png, vendor/)
 netlify/functions/      parse-voice.mjs → POST /api/parse-voice
-app.py, generator.py    legacy Streamlit version (kept until Netlify is live)
 ```
