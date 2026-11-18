@@ -109,5 +109,66 @@
     return doc;
   }
 
-  root.InvoicePdf = { buildInvoicePdf: buildInvoicePdf, computeLines: computeLines, fmt: fmt };
+
+  // Delivery challan (A4) — mirrors the Word template DC_25004.
+  function buildChallanPdf(jsPDFCtor, meta, lines) {
+    const doc = new jsPDFCtor({ unit: 'pt', format: 'a4' });
+    const pageW = doc.internal.pageSize.getWidth(); // 595
+    const L = 72, R = pageW - 72, cx = pageW / 2;
+    const BLUE = [68, 114, 196];
+
+    doc.setTextColor(0);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+    doc.text('Sr no. ' + (meta.challan_no || ''), 47, 87);
+
+    doc.setDrawColor.apply(doc, BLUE); doc.setLineWidth(0.75);
+    doc.line(cx - 167, 90, cx + 167, 90);
+    doc.setTextColor.apply(doc, BLUE);
+    doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(17);
+    doc.text('DELIVERY CHALLAN', cx, 121, { align: 'center' });
+    doc.line(cx - 167, 140, cx + 167, 140);
+
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+    doc.text('MANAGEMENT SERVICES', cx, 168, { align: 'center' });
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(7);
+    doc.text('Address:38 Ghazali Flats GOR 4 Model Town Extension Lahore', cx, 187, { align: 'center' });
+
+    doc.setTextColor(0); doc.setFontSize(9.5);
+    function field(label, value, y) {
+      doc.setFont('helvetica', 'bold'); doc.text(label, L, y);
+      const w = doc.getTextWidth(label + ' ');
+      doc.setFont('helvetica', 'normal'); doc.text(String(value || ''), L + w, y);
+    }
+    field('Date:', meta.date, 249);
+    field('PO Number:', meta.po_number, 272);
+    field('Deliver to:', meta.deliver_to, 295);
+
+    const body = lines
+      .filter(function (it) { return String(it.description || '').trim() || Number(it.qty); })
+      .map(function (it) { return [it.description || '', fmtQty(it.qty)]; });
+    body.push(['', ''], ['', '']);
+
+    doc.autoTable({
+      startY: 351,
+      margin: { left: L, right: pageW - R, bottom: 140 },
+      tableWidth: R - L,
+      head: [['Descriptions', 'Quantity']],
+      body: body,
+      theme: 'grid',
+      styles: { font: 'helvetica', fontSize: 9, textColor: 0, lineColor: 0, lineWidth: 0.5, cellPadding: { top: 2, bottom: 2, left: 4, right: 4 }, minCellHeight: 14, overflow: 'linebreak' },
+      headStyles: { fillColor: false, textColor: 0, fontStyle: 'bold', halign: 'center' },
+      columnStyles: { 0: { cellWidth: 310 }, 1: { cellWidth: (R - L) - 310 } },
+      showHead: 'everyPage'
+    });
+
+    // Delivered / Received lines: fixed position like the template, pushed down if the table runs long
+    let y = Math.max(578, doc.lastAutoTable.finalY + 60);
+    if (y > doc.internal.pageSize.getHeight() - 60) { doc.addPage(); y = 120; }
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setDrawColor(0); doc.setLineWidth(0.6);
+    doc.text('Delivered By:', L, y); doc.line(L + 60, y + 2, L + 268, y + 2);
+    doc.text('Received By:', L + 2, y + 23); doc.line(L + 60, y + 25, L + 268, y + 25);
+    return doc;
+  }
+
+  root.InvoicePdf = { buildInvoicePdf: buildInvoicePdf, buildChallanPdf: buildChallanPdf, computeLines: computeLines, fmt: fmt };
 })(typeof window !== 'undefined' ? window : globalThis);

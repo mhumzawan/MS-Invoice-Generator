@@ -23,6 +23,9 @@
   button.active { outline: 2px solid var(--ink); outline-offset: -2px; font-weight: 600; }
   button:disabled { opacity: .55; cursor: not-allowed; }
   .block { width: 100%; }
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  button.secondary { background: var(--ink); border-color: var(--ink); color: #fff; font-weight: 600; }
+  @media (max-width: 760px) { .actions { grid-template-columns: 1fr; } }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 14px; }
   .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
   label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
@@ -88,6 +91,7 @@
         <div><label for="phone">Phone Number</label><input id="phone" inputmode="tel"></div>
         <div><label for="buyer">Buyer's Name</label><input id="buyer" placeholder="e.g., Zubaida Associates"></div>
         <div><label for="po">PO Number</label><input id="po"></div>
+        <div><label for="challan">Challan No. <span style="opacity:.7">(for delivery challan)</span></label><input id="challan" placeholder="e.g., 25076"></div>
       </div>
     </div>
 
@@ -102,7 +106,10 @@
       </div>
     </div>
 
-    <button class="primary block" id="genBtn">🔥 Generate and Download Invoice</button>
+    <div class="actions">
+      <button class="primary" id="genBtn">🔥 Generate and Download Invoice</button>
+      <button class="secondary" id="challanBtn">🚚 Download Delivery Challan</button>
+    </div>
   </section>
 </div>
 
@@ -202,6 +209,16 @@
     if (!iso) return '';
     const [y, m, d] = iso.split('-'); return d + '-' + m + '-' + y;
   }
+  $('challanBtn').onclick = () => {
+    const meta = {
+      challan_no: $('challan').value.trim(), date: ddmmyyyy($('date').value),
+      po_number: $('po').value, deliver_to: $('buyer').value
+    };
+    const lines = rows.map((r) => ({ qty: r.qty, description: r.desc }));
+    const doc = InvoicePdf.buildChallanPdf(window.jspdf.jsPDF, meta, lines);
+    doc.save('DC_' + (meta.challan_no || 'Draft').replace(/[^\w.-]+/g, '-') + '.pdf');
+  };
+
   $('genBtn').onclick = () => {
     const meta = {
       date: ddmmyyyy($('date').value), buyer_name: $('buyer').value, bill_number: $('bill').value,
